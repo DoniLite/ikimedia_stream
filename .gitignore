@@ -1,3 +1,6 @@
 streaming-service
 streaming_service.db
 .env
+?_auth&_auth_user=&_auth_pass=&_auth_crypt=sha1
+/uploads
+streaming-service.s3db
