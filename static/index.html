@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Streaming Service</title>
+</head>
+<body>
+    <h1>Generate Streaming Link</h1>
+    <form id="generate-link-form">
+        <input type="text" id="username" placeholder="Username" required>
+        <button type="submit">Generate Link</button>
+    </form>
+    <div id="stream-link"></div>
+
+    <h1>Upload Video</h1>
+    <form id="upload-form" enctype="multipart/form-data">
+        <input type="text" id="upload-username" placeholder="Username" required>
+        <input type="file" id="file" name="file" accept="video/*" required>
+        <button type="submit">Upload</button>
+    </form>
+    <div id="upload-message"></div>
+
+    <script>
+        document.getElementById('generate-link-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const username = document.getElementById('username').value;
+
+            fetch('/generate-link', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `username=${username}`,
+            })
+            .then(response => response.json())
+            .then(data => {
+                const streamLink = `/stream?token=${data.token}`;
+                document.getElementById('stream-link').innerHTML = `<a href="${streamLink}">Stream Video</a>`;
+            })
+            .catch(error => console.error('Error:', error));
+        });
+
+        document.getElementById('upload-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const username = document.getElementById('upload-username').value;
+            const fileInput = document.getElementById('file');
+            const formData = new FormData();
+            formData.append('username', username);
+            formData.append('file', fileInput.files[0]);
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData,
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('upload-message').textContent = data.message;
+            })
+            .catch(error => console.error('Error:', error));
+        });
+    </script>
+</body>
+</html>
