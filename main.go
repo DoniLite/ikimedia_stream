@@ -32,31 +32,32 @@ type Claims struct {
 var db *sql.DB
 
 type Service struct {
-	Db *sql.DB
+	Db       *sql.DB
 	Security Claims
 }
 
 func initDB() {
 	var err error
-    fdbFile := dbName + "?_auth&_auth_user=" + dbUser + "&_auth_pass=" + dbPassword + "&_auth_crypt=sha1"
+	fdbFile := dbName + "?_auth&_auth_user=" + dbUser + "&_auth_pass=" + dbPassword + "&_auth_crypt=sha1"
 	db, err = sql.Open("sqlite3", fdbFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	createTable := `CREATE TABLE IF NOT EXISTS tokens (
+	createUserTable := `CREATE TABLE IF NOT EXISTS tokens (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT NOT NULL,
         token TEXT NOT NULL,
         expires_at TIMESTAMP NOT NULL
     );`
-	_, err = db.Exec(createTable)
+	_, err = db.Exec(createUserTable)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
 func main() {
+	gin.SetMode(gin.ReleaseMode)
 	err := godotenv.Load()
 	// var count int
 	if err != nil {
@@ -64,7 +65,11 @@ func main() {
 	}
 	log.Formatter = new(logrus.JSONFormatter)
 	log.Level = logrus.InfoLevel
-	set.PrintSomething("server running")
+
+	err = set.MakeServerDirs()
+	if err != nil {
+		log.Fatal("Error creating server dir: ", err)
+	}
 
 	// time.AfterFunc(5000, func(){
 	// 	fname := "data/serverOutput" + strconv.FormatInt(int64(count), 6) + ".csv"
@@ -75,10 +80,10 @@ func main() {
 	// 	}
 	// })
 	// go func() {
-		
+
 	// }()
 	initDB()
-	er := uploadCSV("output.csv")
+	er := uploadCSV("./data/csv/output.csv")
 	if er != nil {
 		log.Fatal("Error uploading")
 	}
@@ -89,6 +94,7 @@ func main() {
 	r.Static("/static", "./static")
 	r.LoadHTMLFiles("static/index.html")
 
+	// The defaul route function
 	r.GET("/", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "index.html", nil)
 	})
@@ -96,12 +102,27 @@ func main() {
 	r.POST("/generate-link", generateLink)
 	r.GET("/stream", stream)
 	r.POST("/upload", upload)
-	r.POST("/album", postAlbums)
+	r.GET("/api/secure/getKey", cryptoGenerate)
+	// r.POST("/post", postSomething)
 
 	log.Info("Starting server on :8080")
 	r.Run(":8080")
 }
 
+func cryptoGenerate(c *gin.Context) {
+	
+	typeOfKey := c.Query("type")
+	pubKey, err := set.RSAKeyGenerator(typeOfKey)
+	if err != nil {
+		c.IndentedJSON(http.StatusInternalServerError, "Error generating")
+		return
+	}
+	
+	c.IndentedJSON(http.StatusOK, gin.H{"ok": true, "key": pubKey})
+}
+
+// Link Generator takes the following input:
+// - name
 func generateLink(c *gin.Context) {
 	username := c.PostForm("username")
 
@@ -136,6 +157,26 @@ func generateLink(c *gin.Context) {
 
 	c.IndentedJSON(http.StatusOK, gin.H{"token": tokenString})
 }
+
+// func postSomething(c *gin.Context) {
+// 	username := c.PostForm("username")
+// 	from := c.PostForm("from")
+// 	date := c.PostForm("date")
+// 	content := c.PostForm("content")
+// 	postFile, err := c.FormFile("file")
+// 	if from != "" {
+// 		// This post is reposted...
+// 	}
+// 	fileExt := path.Ext(postFile.Filename)
+// 	if err != nil {
+// 		c.IndentedJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+// 		return
+// 	}
+// }
+
+// func getProfileByUser(r *gin.Context) {
+
+// }
 
 func upload(c *gin.Context) {
 	username := c.PostForm("username")
@@ -241,7 +282,7 @@ func stream(c *gin.Context) {
 	_, err = file.Read(buffer)
 	if err != nil {
 		log.WithError(err).Error("Error reading file")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "The file desn't exist"})
 		return
 	}
 
@@ -254,34 +295,8 @@ func stream(c *gin.Context) {
 	c.File(filePath)
 }
 
-// album represents data about a record album.
-type album struct {
-    ID     string  `json:"id"`
-    Title  string  `json:"title"`
-    Artist string  `json:"artist"`
-    Price  float64 `json:"price"`
-}
 
-var albums = []album{
-    {ID: "1", Title: "Album 1", Artist: "Artist 1", Price: 19.99},
-    {ID: "2", Title: "Album 2", Artist: "Artist 2", Price: 24.99},
-}
-
-func postAlbums(c *gin.Context) {
-    var newAlbum album
-
-    // Call BindJSON to bind the received JSON to
-    // newAlbum.
-    if err := c.BindJSON(&newAlbum); err != nil {
-        return
-    }
-
-    // Add the new album to the slice.
-    albums = append(albums, newAlbum)
-    c.IndentedJSON(http.StatusCreated, newAlbum)
-}
-
-func uploadCSV(filePath string ) error {
+func uploadCSV(filePath string) error {
 
 	// Exécuter une requête SQL pour extraire les données
 	rows, err := db.Query("SELECT * FROM tokens")
@@ -295,16 +310,16 @@ func uploadCSV(filePath string ) error {
 	if err != nil {
 		log.Fatalf("Failed to get columns: %v", err)
 	}
-    
-    file, err := os.Create(filePath)
-    if err!= nil {
-        return err
-    }
-    defer file.Close()
 
-    writer := csv.NewWriter(file)
+	file, err := os.Create(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
 	defer writer.Flush()
-    // Écrire les en-têtes des colonnes dans le fichier CSV
+	// Écrire les en-têtes des colonnes dans le fichier CSV
 	if err := writer.Write(columns); err != nil {
 		log.Fatalf("Failed to write headers to CSV: %v", err)
 	}
@@ -338,6 +353,7 @@ func uploadCSV(filePath string ) error {
 		return err
 	}
 
-    set.PrintSomething("success")
-    return nil
+
+	set.PrintSomething("success")
+	return nil
 }
