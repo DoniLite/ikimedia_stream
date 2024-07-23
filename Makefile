@@ -4,6 +4,7 @@ BINARY=streaming-service
 # Variables pour le chemin du fichier de base de données et les dossiers statiques
 DB_FILE=./streaming_service.db
 STATIC_DIR=./static
+UPLOAD_DIR=./uploads
 
 # Commande pour compiler le projet
 build:
@@ -11,7 +12,7 @@ build:
 	go build -o $(BINARY) main.go
 
 # Commande pour exécuter le projet
-run: build
+run: build initdirs
 	@echo "Running the project..."
 	./$(BINARY)
 
@@ -19,11 +20,17 @@ run: build
 clean:
 	@echo "Cleaning up..."
 	rm -f $(BINARY) $(DB_FILE)
+	rm -rf $(UPLOAD_DIR)
 
 # Commande pour initialiser la base de données (au cas où tu voudrais une commande dédiée)
 initdb:
 	@echo "Initializing the database..."
 	sqlite3 $(DB_FILE) "CREATE TABLE IF NOT EXISTS tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL, token TEXT NOT NULL, expires_at TIMESTAMP NOT NULL);"
+
+# Commande pour créer les dossiers nécessaires
+initdirs:
+	@echo "Creating upload directories..."
+	mkdir -p $(UPLOAD_DIR)
 
 # Commande pour générer des liens de streaming (pour tester l'API)
 gen-link:
@@ -37,6 +44,7 @@ help:
 	@echo "  make run       Run the project"
 	@echo "  make clean     Clean the project (remove binary and database)"
 	@echo "  make initdb    Initialize the database"
+	@echo "  make initdirs  Initialize upload directories"
 	@echo "  make gen-link  Generate a streaming link"
 	@echo "  make help      Show this help message"
 
